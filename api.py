@@ -1,26 +1,20 @@
-import json, urllib.request, sys
+# ollama_native.py
+import json, urllib.request, urllib.error, sys
 
-# === 把這三個變數改成你的固定值 ===
-HOST   = "http://YOUR_OLLAMA_HOST:11434"   # 例： http://10.0.0.5:11434 或 http://your.domain/ollama
-MODEL  = "qwen2.5:7b-instruct"              # 例： llama3.2 / qwen2.5:14b-instruct
-PROMPT = "why is the sky blue?"             # 你要問的內容（可改成任何字串）
+URL   = "http://YOUR_OLLAMA_HOST:11434/api/chat"  # 把這行改成你的完整端點
+MODEL = "qwen2.5:7b-instruct"
+PROMPT = "why is the sky blue?"
 
 def main():
-    url = HOST.rstrip("/") + "/api/chat"
-    payload = {
-        "model": MODEL,
-        "messages": [{"role": "user", "content": PROMPT}],
-        "stream": False  # 非串流：一次回完整結果
-    }
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-        headers={"Content-Type": "application/json"}
-    )
+    payload = {"model": MODEL, "messages": [{"role":"user","content":PROMPT}], "stream": False}
+    req = urllib.request.Request(URL, data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+                                 headers={"Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=120) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            print((data.get("message") or {}).get("content", ""))
+            obj = json.loads(resp.read().decode("utf-8"))
+            print((obj.get("message") or {}).get("content", obj.get("response","")))
+    except urllib.error.HTTPError as e:
+        print(f"[HTTP {e.code}] {e.reason}\n{e.read().decode('utf-8',errors='replace')}", file=sys.stderr); sys.exit(2)
     except Exception as e:
         print(f"[error] {e}", file=sys.stderr); sys.exit(2)
 
