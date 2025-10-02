@@ -1,14 +1,28 @@
-import requests
+import json, urllib.request, sys
 
-url = "http://YOUR_OLLAMA_HOST:11434/api/generate"
+# === 把這三個變數改成你的固定值 ===
+HOST   = "http://YOUR_OLLAMA_HOST:11434"   # 例： http://10.0.0.5:11434 或 http://your.domain/ollama
+MODEL  = "qwen2.5:7b-instruct"              # 例： llama3.2 / qwen2.5:14b-instruct
+PROMPT = "why is the sky blue?"             # 你要問的內容（可改成任何字串）
 
-payload = {
-    "model": "qwen2.5:7b-instruct",   # 換成你伺服器已經 pull 下來的模型
-    "prompt": "請用繁體中文介紹一下台灣的小吃。",
-    "stream": False
-}
+def main():
+    url = HOST.rstrip("/") + "/api/chat"
+    payload = {
+        "model": MODEL,
+        "messages": [{"role": "user", "content": PROMPT}],
+        "stream": False  # 非串流：一次回完整結果
+    }
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers={"Content-Type": "application/json"}
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            print((data.get("message") or {}).get("content", ""))
+    except Exception as e:
+        print(f"[error] {e}", file=sys.stderr); sys.exit(2)
 
-resp = requests.post(url, json=payload)
-resp.raise_for_status()
-
-print(resp.json()["response"])
+if __name__ == "__main__":
+    main()
