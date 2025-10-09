@@ -13,26 +13,24 @@ from .utils import (
 BASE = Path(__file__).resolve().parents[1]
 
 def post_validate(payload: Dict[str, Any], raw_text: str) -> Dict[str, Any]:
-    # 身分證檢核
+    # 1) 身分證檢核（僅驗證，不主動新增 targets）
     targets = payload.get("targets", []) or []
     for p in targets:
         twid = p.get("tw_id")
         p["id_valid"] = bool(twid and validate_tw_id(twid))
     payload["targets"] = targets
 
-    # 承辦資訊 fallback（職稱/姓名）
+    # 2) officer/phone/doc_no 的 fallback（保持你現有的輔助規則）
     if not payload.get("officer_role") and not payload.get("officer_name"):
         role, name = extract_officer(raw_text)
         payload["officer_role"] = role
         payload["officer_name"] = name
 
-    # 聯絡電話 fallback（多樣式→正規化）
     if not payload.get("contact_phone"):
         phone = extract_phone(raw_text)
         if phone:
             payload["contact_phone"] = phone
 
-    # 發文字號 fallback
     if not payload.get("doc_no"):
         doc_no = extract_doc_no(raw_text)
         if doc_no:
