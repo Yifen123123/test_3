@@ -36,5 +36,11 @@
 辦法（結論）：
 　　就上述對象與項目，本公司已完成系統查核並將依規定提供可提供之資料；若有未通過身分驗證或授權不足部分，俟補正後續辦。
 
+{% if officer or contact_phone %}
+附註：
+　　來函承辦人：{{ officer or "【未提供】" }}　電話：{{ contact_phone or "【未提供】" }}
+{% endif %}
+
 承辦聯絡：
-　　單位：{{ contact_dept }}　承辦：{{ contact_person }}　電話：{{ contact_phone }}　Email：{{ contact_email }}
+　　單位：{{ contact_dept }}　承辦：{{ contact_person }} 
+　　電話：{{ contact_phone }}　Email：{{ contact_email }}
