@@ -1,46 +1,32 @@
-發文機關：{{ company_name }}
 受文者：{{ agency or "【缺資料】" }}
-發文字號：{{ company_short }}字第 {{ today_yyyymmdd }}-{{ serial_no }} 號
-速別：普通
-密別：普通
 發文日期：{{ today_yyyy }}年{{ today_mm }}月{{ today_dd }}日（西元 {{ today_iso }}）
 主旨：就 貴機關 {{ reference_date or "【缺資料】" }} 基準日 來函查詢之保險資料，復如說明，請查照。
 
 說明：
-一、來函查詢對象如下：
+一、來函資訊：
+　　發文字號（來文）：{{ doc_no or "【未提供】" }}
+{% if officer_role or officer_name or contact_phone %}
+　　承辦資訊：{{ officer_role or "" }}{% if officer_role and officer_name %}／{% endif %}{{ officer_name or "" }}　電話：{{ contact_phone or "【未提供】" }}
+{% endif %}
+
+二、來函查詢對象：
 {% if targets and targets|length>0 -%}
 {% for p in targets %}
-    ({{ loop.index }}) 姓名：{{ p.name or "【缺資料】" }}{% if p.alias and p.alias|length>0 %}（原名/別名：{{ p.alias|join('、') }}）{% endif %}，身分證號：{{ p.tw_id or "【缺資料】" }}{% if not p.get("id_valid", True) %}【身分證檢核未通過，請覆核】{% endif %}
+　　({{ loop.index }}) 姓名：{{ p.name or "【缺資料】" }}{% if p.alias and p.alias|length>0 %}（原名/別名：{{ p.alias|join('、') }}）{% endif %}，身分證號：{{ p.tw_id or "【缺資料】" }}{% if not p.get("id_valid", True) %}【身分證檢核未通過，請覆核】{% endif %}
 {% endfor %}
 {%- else %}
-    【未擷取到查詢對象】
+　　【未擷取到查詢對象】
 {%- endif %}
 
-二、查詢基準日：{{ reference_date or "【缺資料】" }}
+三、查詢基準日：{{ reference_date or "【缺資料】" }}
 
-三、查詢保單項目：
+四、查詢保單項目：
 {% if policies and policies|length>0 -%}
 {% for pol in policies %}
-    - {{ pol.raw }}{% if pol.normalized %}（代碼：{{ pol.normalized }}）{% endif %}{% if pol.policy_no %}，保單號：{{ pol.policy_no }}{% endif %}
+　　- {{ pol.raw }}{% if pol.normalized %}（代碼：{{ pol.normalized }}）{% endif %}{% if pol.policy_no %}，保單號：{{ pol.policy_no }}{% endif %}
 {% endfor %}
 {%- else %}
-    【未擷取到保單項目】
+　　【未擷取到保單項目】
 {%- endif %}
 
-四、依保密與個資保護規範，本公司僅於法令授權範圍內提供資料。若需補充文件或授權，請依程序補齊。
-
-{% if class_specific and class_specific.get("note") %}
-五、{{ class_specific.get("note") }}
-{% endif %}
-
-辦法（結論）：
-　　就上述對象與項目，本公司已完成系統查核並將依規定提供可提供之資料；若有未通過身分驗證或授權不足部分，俟補正後續辦。
-
-{% if officer or contact_phone %}
-附註：
-　　來函承辦人：{{ officer or "【未提供】" }}　電話：{{ contact_phone or "【未提供】" }}
-{% endif %}
-
-承辦聯絡：
-　　單位：{{ contact_dept }}　承辦：{{ contact_person }} 
-　　電話：{{ contact_phone }}　Email：{{ contact_email }}
+（以上內容僅就已提供資料範圍敘明，若需補充文件或授權，請依程序補齊。）

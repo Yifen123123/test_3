@@ -1,51 +1,59 @@
-import argparse, json
+import argparse
 from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
-from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
+from typing import Dict, Any
 
 from .router import load_prompt
 from .llm_client import chat_ollama_json
-from .utils import validate_tw_id, today_fields
+from .utils import (
+    validate_tw_id, today_fields,
+    extract_officer, extract_phone, extract_doc_no
+)
 
 BASE = Path(__file__).resolve().parents[1]
 
-class Person(BaseModel):
-    name: str
-    alias: List[str] = []
-    tw_id: Optional[str] = None
-    id_valid: bool = False
-
-def post_validate(payload: Dict[str, Any]) -> Dict[str, Any]:
+def post_validate(payload: Dict[str, Any], raw_text: str) -> Dict[str, Any]:
     # 身分證檢核
-    targets = payload.get("targets", [])
-    out = []
+    targets = payload.get("targets", []) or []
     for p in targets:
         twid = p.get("tw_id")
         p["id_valid"] = bool(twid and validate_tw_id(twid))
-        out.append(p)
-    payload["targets"] = out
+    payload["targets"] = targets
+
+    # 承辦資訊 fallback（職稱/姓名）
+    if not payload.get("officer_role") and not payload.get("officer_name"):
+        role, name = extract_officer(raw_text)
+        payload["officer_role"] = role
+        payload["officer_name"] = name
+
+    # 聯絡電話 fallback（多樣式→正規化）
+    if not payload.get("contact_phone"):
+        phone = extract_phone(raw_text)
+        if phone:
+            payload["contact_phone"] = phone
+
+    # 發文字號 fallback
+    if not payload.get("doc_no"):
+        doc_no = extract_doc_no(raw_text)
+        if doc_no:
+            payload["doc_no"] = doc_no
+
     return payload
 
-def render_reply(payload: Dict[str, Any], *, company_name: str, company_short: str,
-                 contact_dept: str, contact_person: str, contact_phone: str, contact_email: str,
-                 serial_no: str) -> str:
+def render_reply(payload: Dict[str, Any]) -> str:
     env = Environment(loader=FileSystemLoader(str(BASE / "templates")), trim_blocks=True, lstrip_blocks=True)
     tpl = env.get_template("reply_letter.txt.j2")
     today = today_fields()
     text = tpl.render(
-        company_name=company_name,
-        company_short=company_short,
         agency=payload.get("agency"),
         reference_date=payload.get("reference_date"),
+        doc_no=payload.get("doc_no"),
+        officer_role=payload.get("officer_role"),
+        officer_name=payload.get("officer_name"),
+        contact_phone=payload.get("contact_phone"),
         targets=payload.get("targets", []),
         policies=payload.get("policies", []),
         class_specific=payload.get("class_specific", {}),
-        contact_dept=contact_dept,
-        contact_person=contact_person,
-        contact_phone=contact_phone,
-        contact_email=contact_email,
-        serial_no=serial_no,
         **today
     )
     return text
@@ -59,13 +67,6 @@ def main():
     ap.add_argument("--data-dir", default=str(BASE / "data"), help="資料夾路徑（內含已分類好的 .txt 檔）")
     ap.add_argument("--model", default="qwen2.5:7b-instruct", help="Ollama 模型名稱")
     ap.add_argument("--out-dir", default=str(BASE / "outputs"), help="輸出回文純文字的資料夾")
-    ap.add_argument("--company-name", default="○○人壽保險股份有限公司")
-    ap.add_argument("--company-short", default="○○壽")
-    ap.add_argument("--contact-dept", default="客服科")
-    ap.add_argument("--contact-person", default="張○○")
-    ap.add_argument("--contact-phone", default="(02)1234-5678")
-    ap.add_argument("--contact-email", default="service@example.com")
-    ap.add_argument("--serial-no", default="000001")
     args = ap.parse_args()
 
     data_dir = Path(args.data_dir)
@@ -78,23 +79,14 @@ def main():
 
     for fp in txt_files:
         doc_class = infer_class_from_path(fp)
-        text = fp.read_text(encoding="utf-8", errors="ignore")
-        prompt = load_prompt(text, doc_class=doc_class)
+        raw_text = fp.read_text(encoding="utf-8", errors="ignore")
+        prompt = load_prompt(raw_text, doc_class=doc_class)
 
         print(f"[INFO] 處理：{fp.name}（類別：{doc_class}）… 送 LLM 抽取")
         payload = chat_ollama_json(prompt, model=args.model, temperature=0.1)
-        payload = post_validate(payload)
 
-        reply = render_reply(
-            payload,
-            company_name=args.company_name,
-            company_short=args.company_short,
-            contact_dept=args.contact_dept,
-            contact_person=args.contact_person,
-            contact_phone=args.contact_phone,
-            contact_email=args.contact_email,
-            serial_no=args.serial_no
-        )
+        payload = post_validate(payload, raw_text=raw_text)
+        reply = render_reply(payload)
 
         out_path = out_dir / (fp.stem + ".reply.txt")
         out_path.write_text(reply, encoding="utf-8")

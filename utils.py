@@ -1,6 +1,7 @@
 import re
 from datetime import date
 
+# ===== 身分證檢查碼 =====
 LETTER_MAP = {
     'A':10,'B':11,'C':12,'D':13,'E':14,'F':15,'G':16,'H':17,'I':34,
     'J':18,'K':19,'L':20,'M':21,'N':22,'O':35,'P':23,'Q':24,'R':25,
@@ -21,6 +22,74 @@ def validate_tw_id(twid: str) -> bool:
     weights = [1,9,8,7,6,5,4,3,2,1,1]  # A1,A2,d1..d9
     digits = [a1, a2] + nums
     return sum(w*d for w, d in zip(weights, digits)) % 10 == 0
+
+# ===== 電話抽取與正規化 =====
+# 支援：
+# (03) 12345678 轉 123
+# 02-12345678轉123或456
+# 0212345678#123
+# 03 1234567、(02)1234-5678 等
+PHONE_PATTERNS = [
+    r'\(?(0\d{1,2})\)?[ \-]?(\d{3,4})[ \-]?(\d{3,4})(?:[ \-]*(?:轉|ext\.?|#|分機)[ \-]?(?:([0-9\-、或/]{1,10})))?',
+]
+PHONE_RE = re.compile('|'.join(f'(?:{p})' for p in PHONE_PATTERNS))
+
+def normalize_phone(m: re.Match) -> str:
+    # 取出群組：1區碼, 2前段, 3後段, 4分機（可能含「或」）
+    area, p1, p2, ext = m.group(1), m.group(2), m.group(3), m.group(4)
+    base = f"{area}-{p1}{p2}"
+    if ext:
+        # 將「或」「、」「/」保留為「或」提示
+        ext_norm = ext.replace('、', '或').replace('/', '或')
+        return f"{base}#{ext_norm}"
+    return base
+
+def extract_phone(text: str) -> str | None:
+    # 在「電話/聯絡/承辦」附近優先
+    for kw in ['電話', '聯絡', '分機', '承辦', '書記官']:
+        for m in PHONE_RE.finditer(text):
+            span = m.span()
+            ctx = text[max(0, span[0]-15):min(len(text), span[1]+15)]
+            if kw in ctx:
+                return normalize_phone(m)
+    # 否則抓第一個
+    m = PHONE_RE.search(text)
+    return normalize_phone(m) if m else None
+
+# ===== 承辦資訊抽取（職稱或姓名）=====
+ROLE_WORDS = ['書記官','承辦人','聯絡人','承辦','股員','股長','專員']
+NAME_HINT = r'[^\s，、()（）]{2,4}'  # 2-4字中文名的寬鬆提示
+
+def extract_officer(text: str) -> tuple[str|None, str|None]:
+    # 標記型態：「承辦人：王小明」、「書記官：林OO」、「聯絡人：張小姐」
+    m = re.search(rf'({"|".join(ROLE_WORDS)})[：:]\s*({NAME_HINT})', text)
+    if m:
+        role = m.group(1)
+        name = m.group(2)
+        # 濾掉太明顯不是姓名的詞彙（可視情況擴充）
+        if len(name) > 5 or '電話' in name:
+            name = None
+        return role, name
+    # 只有職稱出現
+    m = re.search(rf'({"|".join(ROLE_WORDS)})[：:]?', text)
+    if m:
+        return m.group(1), None
+    return None, None
+
+# ===== 發文字號抽取（來文）=====
+# 支援：發文字號：XXX、文號：XXX、○字第XXXX號、○○府授人字第…號 等
+DOCNO_CANDIDATE_RE = re.compile(
+    r'(?:發文字號|文號)[：:]\s*([^\n\r，。、]{4,30})'
+    r'|([一二三四五六七八九十○零〇台臺北新高桃竹苗中彰投雲嘉南高屏宜花東金馬\w]{1,6}字第[^\s，。、]{3,20}號)'
+)
+
+def extract_doc_no(text: str) -> str | None:
+    for m in DOCNO_CANDIDATE_RE.finditer(text):
+        g = next((x for x in m.groups() if x), None)
+        if g:
+            # 清理尾端標點
+            return g.strip().strip('，。；；、 ')
+    return None
 
 def today_fields():
     t = date.today()

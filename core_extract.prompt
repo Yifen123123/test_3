@@ -1,27 +1,34 @@
 你是台灣公文的資訊抽取器。請根據「清洗後文本」抽取欄位並**僅輸出 JSON 物件**，符合下列 schema：
 {
-  "agency": "string|null",               // 來函機關（如：臺北地方檢察署、某某地方法院）
+  "agency": "string|null",               // 來函機關（如：臺北地方檢察署、○○市政府）
   "reference_date": "yyyy-mm-dd|null",   // 基準日，民國年需轉西元
+  "doc_no": "string|null",               // 來文之發文字號/文號（樣式多元，原樣保留）
+  "officer_role": "string|null",         // 承辦人的職稱（如：書記官、承辦人、聯絡人、股員）
+  "officer_name": "string|null",         // 承辦人姓名（若無姓名也可只填職稱）
+  "contact_phone": "string|null",        // 聯絡電話，可含分機（例如：02-12345678#123）
   "targets": [                           // 查詢對象（可多筆）
     {
-      "name": "string",                  // 中文姓名
-      "alias": ["string"],               // 原名/又名/別名（若有）
-      "tw_id": "string|null"             // 身分證號，若格式不符給 null（系統稍後會做檢查碼驗證）
+      "name": "string",
+      "alias": ["string"],
+      "tw_id": "string|null"
     }
   ],
-  "policies": [                          // 來函所要查詢的保單項目
+  "policies": [
     {"raw": "string", "normalized": null, "policy_no": null}
   ],
-  "class_specific": {},                  // 類別特有欄位由 add-on 補充；若無則留空物件 {}
-  "notes": ["string"]                    // 任何需要人工覆核的說明（選填）
+  "class_specific": {},
+  "notes": ["string"]
 }
 
 規則：
 1) 只輸出 JSON，不要加註解或多餘文字。
 2) 日期一律 yyyy-mm-dd；民國年需自行轉換為西元日期。
-3) 身分證若可疑或格式不符，填 null（不要猜）。
-4) 保單項目：以原文為主填入 raw；normalized 與 policy_no 先留空或 null。
-5) 若文本沒有某欄位，請以 null 或空陣列表示。
+3) 發文字號/文號樣式繁多：若存在，請擷取最完整的一組（例如：「臺檢偵字第112123號」、「新府授人字第1140123456號」）；若無則 null。
+4) 承辦資訊：若只出現職稱（如「書記官」「承辦人」「聯絡人」）但沒有姓名，則 officer_role 填職稱、officer_name 填 null。
+5) 聯絡電話可包含各種分隔與「轉/分機/#」等，請將其原樣擷取，勿亂改；若無則 null。
+6) 身分證若可疑或格式不符，填 null。
+7) 保單項目：以原文為主填入 raw；normalized 與 policy_no 先留空或 null。
+8) 若文本沒有某欄位，請以 null 或空陣列表示。
 
 清洗後文本：
 <<<
