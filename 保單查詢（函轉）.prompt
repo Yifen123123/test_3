@@ -1,0 +1,120 @@
+補充（class="保單查詢"）：
+你正在接續「core」已輸出的一個 JSON 物件，請在此基礎上**合併更新**下列欄位。
+⚠️ 僅輸出**一個完整 JSON 物件**（不可有多餘說明文字、註解或第二個 JSON）。
+
+────────────────────────────
+一、policies 欄位（請建立或覆蓋）
+────────────────────────────
+"policies": [
+  {"raw": "string", "normalized": null, "policy_no": null}
+]
+規則：
+- 從文中擷取所有涉及查詢的保單項目（例：「壽險」「意外險」「醫療險」）。
+- 若有明列保單號或契約號，填入 "policy_no"。
+- "normalized" 暫留 null。
+
+────────────────────────────
+二、transfer_info 欄位（若有函轉結構才建立）
+────────────────────────────
+"transfer_info": {
+  "has_transfer": true|false,              // 是否為函轉案件
+  "forwarding_agency": "string|null",      // 轉發機關
+  "origin_agency": "string|null",          // 原始發文機關
+  "related_doc_no": "string|null",         // 原文文號
+  "summary_purpose": "string|null"         // 轉發查詢內容摘要
+}
+判斷邏輯：
+- 若文中同時出現以下兩類語句 → 判定 has_transfer=true：
+  * 「轉請」「奉轉」「轉知」「檢送」「轉呈」「轉復」
+  * 「來函」「來文」「貴院」「○○法院」「○○檢察署」
+- 轉發機關（forwarding_agency）常以「本會」「本公司」「金管會」「主管機關」等開頭。
+- 原始發文機關（origin_agency）常以「地方法院」「檢察署」「債權人」「公庫」等結尾。
+- summary_purpose：用一句自然中文總結被轉文內容，例如：
+  「轉請查復債權人名下壽險及意外險保單狀況」。
+- 若未偵測到轉請結構 → has_transfer=false，並略過 transfer_info 其他欄位。
+
+────────────────────────────
+三、class_specific 欄位（請建立或合併）
+────────────────────────────
+{
+  "query_mode": "by_policy_no" | "by_person" | "unspecified",
+  "policy_nos": ["string"],
+  "insured_names": ["string"],
+  "insured_ids": ["string"],
+  "subtypes": [
+    "contract_change",       // 契約變更
+    "policyholder_change",   // 要保人變更
+    "claim_history",         // 給付紀錄
+    "loan_history"           // 借還款紀錄
+  ],
+  "time_range": { "start": "yyyy-mm-dd|null", "end": "yyyy-mm-dd|null" },
+  "note": "string"
+}
+
+偵測規則：
+- 若文中出現「保單號、契約號、單號」 → query_mode=by_policy_no。
+- 若出現人名（要保人、被保險人）而無保單號 → query_mode=by_person。
+- 子類型關鍵詞對應：
+  * 「契約變更、批改、展期、復效」→ "contract_change"
+  * 「要保人變更、受益人變更、保戶變更」→ "policyholder_change"
+  * 「給付、理賠、保險金給付、醫療給付、失能給付」→ "claim_history"
+  * 「保單借款、還款、墊繳」→ "loan_history"
+- 時間範圍：「自○○至○○」「截至○○」→ 轉換 yyyy-mm-dd。
+
+────────────────────────────
+四、note 組句規則（務必產生）
+────────────────────────────
+請依實際文意產生一句中文說明。
+- 若 has_transfer=true：
+  1️⃣ 若同時有 forwarding_agency 與 origin_agency：
+      「本案為保單查詢函（函轉案件），由 {forwarding_agency} 轉請 {origin_agency} 查覆，主要查詢：{summary_purpose}。」
+  2️⃣ 若僅有 forwarding_agency：
+      「本案為保單查詢函（由 {forwarding_agency} 轉請辦理），主要查詢：{summary_purpose}。」
+  3️⃣ 若僅有 origin_agency：
+      「本案為保單查詢函（原發文機關：{origin_agency}），主要查詢：{summary_purpose}。」
+- 若 has_transfer=false：
+  - 若 query_mode=by_person：
+      「本案為保單查詢函（以人別查詢），依文內容辦理。」
+  - 若 query_mode=by_policy_no：
+      「本案為保單查詢函（以保單號查詢），依文內容辦理。」
+  - 其餘 → 「本案為保單查詢函，依文內容辦理。」
+
+────────────────────────────
+五、範例
+────────────────────────────
+範例一（有函轉）：
+{
+  "transfer_info": {
+    "has_transfer": true,
+    "forwarding_agency": "金融監督管理委員會",
+    "origin_agency": "臺北地方法院",
+    "related_doc_no": "北院金字第112號",
+    "summary_purpose": "轉請查復王OO名下壽險及意外險保單資料"
+  },
+  "class_specific": {
+    "query_mode": "by_person",
+    "insured_names": ["王OO"],
+    "subtypes": ["claim_history"],
+    "note": "本案為保單查詢函（函轉案件），由 金融監督管理委員會 轉請 臺北地方法院 查覆，主要查詢：轉請查復王OO名下壽險及意外險保單資料。"
+  }
+}
+
+範例二（無函轉）：
+{
+  "transfer_info": {
+    "has_transfer": false
+  },
+  "class_specific": {
+    "query_mode": "by_policy_no",
+    "policy_nos": ["1234567"],
+    "subtypes": ["loan_history"],
+    "note": "本案為保單查詢函（以保單號查詢），依文內容辦理。"
+  }
+}
+
+────────────────────────────
+嚴格要求：
+────────────────────────────
+- 僅輸出**一個 JSON 物件**。
+- 不刪除 core 已有欄位；僅新增或覆蓋上方列舉欄位。
+- 不可包含註解、說明或多個 JSON。
