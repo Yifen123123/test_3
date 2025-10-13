@@ -1,41 +1,58 @@
 補充（class="保單查詢"）：
-請在「core」輸出的 JSON 基礎上，加入或覆蓋下列欄位。僅輸出**完整 JSON 物件**（不可只輸出片段）。
+你正在接續「core」已輸出的一個 JSON 物件，請在此基礎上**合併更新**下列欄位。
+⚠️ 僅輸出**一個完整 JSON 物件**（不可有任何前後說明、程式碼區塊、或第二個 JSON）。
 
 一、policies 欄位（請建立或覆蓋）
 "policies": [
   {"raw": "string", "normalized": null, "policy_no": null}
 ]
 規則：
-- 從公文原文判斷要查的保單項目，逐項拆成多筆（例如：「壽險、意外險、醫療險」→ 三筆）。
-- 若來文點名特定保單號，請在對應項目的 "policy_no" 寫入原文號碼；未知就留 null。
-- "normalized" 先留 null（由系統後續正規化）；不要臆造代碼。
+- 從來文中判斷要查的保單項目，逐項拆成多筆（例：「壽險、意外險、醫療險」→ 三筆）。
+- 若來文點名特定保單號（保單號/保單編號/契約號/單號），請在對應項目的 "policy_no" 寫入原文號碼；未知就留 null。
+- "normalized" 先留 null（由系統後續正規化）；不要臆造代碼或欄位。
 
 二、class_specific 欄位（請建立或合併）
-在 "class_specific" 內加入：
+請在 "class_specific" 內加入/更新下列鍵：
 {
-  "query_mode": "by_policy_no" | "by_person" | "unspecified",   // 查詢模式
-  "policy_nos": ["string"],                                      // 文中出現的保單號（若有）
+  "query_mode": "by_policy_no" | "by_person" | "unspecified",   // 以保單號查、以人別查、或未明
+  "policy_nos": ["string"],                                      // 文中出現的保單號（若有；多個可列多筆）
   "insured_names": ["string"],                                   // 以人別查詢時的姓名（若有）
-  "insured_ids": ["string"],                                     // 以人別查詢時的身分證（若有，但不強求格式）
+  "insured_ids": ["string"],                                     // 以人別查詢時的身分證（若有，不強求格式）
   "subtypes": [                                                  // 子類型（可多選）
-    "contract_change",       // 契約變更
-    "policyholder_change",   // 要保人變更
-    "claim_history",         // 保險金給付紀錄
-    "loan_history"           // 保單借還款記錄
+    "contract_change",       // 契約變更 / 批改 / 展期 / 復效
+    "policyholder_change",   // 要保人變更 / 受益人變更 / 保戶變更
+    "claim_history",         // 保險金給付/理賠紀錄（醫療、失能等）
+    "loan_history"           // 保單借款/還款/墊繳相關紀錄
   ],
-  "time_range": { "start": "yyyy-mm-dd|null", "end": "yyyy-mm-dd|null" } // 若文中指定查詢區間則填
+  "time_range": { "start": "yyyy-mm-dd|null", "end": "yyyy-mm-dd|null" }, // 文中若指定期間（民國轉西元）
+  "note": "string"                                                // ★務必產生（見下方組句規則）
 }
 
-偵測與判斷規則（指示性，非排他）：
-- 若文中出現「保單號、保單編號、契約號、單號」及其數字，"query_mode"=by_policy_no，並將號碼填入 "policy_nos"。
-- 若文中出現具體的被保險人或要保人，且強調「某人之保單」而未列保單號，"query_mode"=by_person，並將姓名填入 "insured_names"、身分證填入 "insured_ids"（若有）。
-- 關鍵詞對應子類型：
-  * 「契約變更、批改、展期、復效」→ "contract_change"
-  * 「要保人變更、要保變更、保戶變更、受益人變更」→ "policyholder_change"
-  * 「給付、理賠、保險金給付、醫療給付、失能給付」→ "claim_history"
-  * 「保單借款、借款、還款、還本、墊繳」→ "loan_history"
-- 若有「自××至××」等時間範圍，請轉換為 yyyy-mm-dd 寫入 "time_range"；民國年需轉為西元；不確定填 null。
+偵測規則（指示性，非排他）：
+- 若有「保單號/保單編號/契約號/單號」＋號碼 → query_mode=by_policy_no，並寫入 policy_nos。
+- 若強調「某人之保單/名下保單/被保險人/要保人」且未列號 → query_mode=by_person，insured_names/insured_ids 盡量填。
+- 子類型關鍵詞（命中其一即可加入，允許多選）：
+  * 契約變更 / 批改 / 展期 / 復效 → "contract_change"
+  * 要保人變更 / 受益人變更 / 保戶變更 → "policyholder_change"
+  * 給付 / 理賠 / 保險金給付 / 醫療給付 / 失能給付 → "claim_history"
+  * 保單借款 / 借款 / 還款 / 還本 / 墊繳 → "loan_history"
+- 期間語句如「自××至××」「自民國×年×月×日至×年×月×日」→ 轉為 yyyy-mm-dd；無法判斷則填 null。
+
+三、note 組句規則（**必須產生一行中文 note**）
+請依下列邏輯產生 "class_specific.note"（務必產生，即使資訊不足）：
+- 以「本案為保單查詢註記」作為基底。
+- 若 query_mode=by_policy_no 且有 policy_nos：在括號內補「以保單號查詢：{首個號碼}」。
+- 若 query_mode=by_person 且有 insured_names：在括號內補「以人別查詢：{首位姓名}」；**不要**附上身分證。
+- 若 subtypes 非空：在括號內加上「子類型：{中文}」。子類型的中文對應如下：
+  - contract_change → 契約變更
+  - policyholder_change → 要保人變更
+  - claim_history → 給付紀錄
+  - loan_history → 借還款紀錄
+- 例：
+  - 本案為保單查詢註記（以保單號查詢：0001234567；子類型：給付紀錄）
+  - 本案為保單查詢註記（以人別查詢：王OO；子類型：借還款紀錄）
+- 若上述資訊皆無，仍須輸出「本案為保單查詢註記」做為 note。
 
 嚴格要求：
-- 僅輸出 JSON 物件（不要有註解或說明文字）。
-- 保持 core 提供欄位不變；僅在上方列舉的部分新增或覆蓋。
+- 僅輸出**一個** JSON 物件（前後不得包含任何文字、註解、或第二個 JSON）。
+- 不要移除 core 既有欄位；僅按照本補充規則新增或覆蓋列舉的欄位。
