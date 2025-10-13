@@ -1,0 +1,64 @@
+補充（class="收取令"）：
+你正在接續「core」已輸出的一個 JSON 物件，請在此基礎上**合併更新**下列欄位。
+⚠️ 僅輸出**一個完整 JSON 物件**（不得包含前後說明文字、註解或第二個 JSON）。
+
+一、policies 欄位（請建立或覆蓋）
+"policies": [
+  {"raw": "string", "normalized": null, "policy_no": null}
+]
+規則：
+- 擷取文中出現的保單或契約號（例如「保單號○○○」「契約號○○」）。
+- 未列號碼時，可從上下文判斷查核對象（例如「被保險人名下各保單」）。
+- "normalized" 暫留 null，不要自行生成代碼。
+
+二、class_specific 欄位（請建立或合併）
+{
+  "query_mode": "unspecified",
+  "subtypes": [ "string" ],
+  "conditions_raw": "string|null",
+  "note": "string"
+}
+規則：
+- query_mode 一律 unspecified。
+- subtypes 為收取條件，可多選或單選，請根據文字內容判斷下列類型：
+  1. 「終止契約」、「終止保險契約」 → "terminate_contract"
+  2. 「收取保單資訊」、「終止保單資訊」 → "collect_policy_info"
+  3. 「收取金額」、「給付金額」、「給付方式」、「移轉於債權人」、「撥付於債權人」 → "collect_payment_to_creditor"
+  4. 「排除○○險」、「不包含○○險」 → "exclude_policy_type"
+  5. 「紅利」、「紅利債權」、「分紅金」 → "bonus_credit"
+- 若無法歸類至上述任一類，請新增自擬子類型（用一個簡短描述性英文，如 "other_condition"），並於 note 內補充中文說明。
+- conditions_raw：請直接擷取原文中「收取條件」或相關句子片段（例如「收取本公司應給付之保險金移轉予債權人」）。
+- note：請產出一句中文說明，邏輯如下：
+  - 若有條件文字：  
+    「本案為保險金收取令，依據文載收取條件：{conditions_raw}。」  
+  - 若可辨識子類型：  
+    「本案為保險金收取令（子類型：{中文對應名稱}）。」
+  - 若有多個子類型：  
+    「本案為保險金收取令，涉及多項收取條件：{中文列舉}。」
+  - 若資訊不足：  
+    「本案為保險金收取令，依公文內容辦理相關收取作業。」
+
+子類型中文對應（用於 note）：
+- terminate_contract → 終止契約
+- collect_policy_info → 收取保單資訊
+- collect_payment_to_creditor → 給付金額移轉於債權人
+- exclude_policy_type → 排除特定保險類型
+- bonus_credit → 紅利債權
+
+範例：
+{
+  "policies": [
+    {"raw": "保單號 1234567", "normalized": null, "policy_no": "1234567"}
+  ],
+  "class_specific": {
+    "query_mode": "unspecified",
+    "subtypes": ["collect_payment_to_creditor"],
+    "conditions_raw": "將應給付保險金移轉於債權人收取",
+    "note": "本案為保險金收取令（子類型：給付金額移轉於債權人）。"
+  }
+}
+
+嚴格要求：
+- 僅輸出一個 JSON 物件。
+- 不要刪除 core 既有欄位；僅新增或覆蓋上方指定項。
+- 不可輸出註解、說明或多餘文字。
