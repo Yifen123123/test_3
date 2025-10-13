@@ -1,0 +1,66 @@
+補充（class="收取＋撤銷"）：
+你正在接續「core」已輸出的一個 JSON 物件，請在此基礎上**合併更新**下列欄位。
+⚠️ 僅輸出**一個完整 JSON 物件**（不可有多餘說明文字、註解或第二個 JSON）。
+
+一、policies 欄位（請建立或覆蓋）
+"policies": [
+  {"raw": "string", "normalized": null, "policy_no": null}
+]
+規則：
+- 擷取文中涉及之保單、契約、收取或撤銷對象（例如「保單號○○○」「契約號○○」）。
+- 可同時包含被撤銷命令所涉及的保單。
+
+二、class_specific 欄位（請建立或合併）
+{
+  "query_mode": "unspecified",
+  "subtypes": [ "string" ],
+  "conditions_raw": "string|null",
+  "related_doc_no": "string|null",
+  "note": "string"
+}
+規則：
+- query_mode 一律 unspecified。
+- subtypes 為複合型態，可同時包含：
+  - "collect_payment_to_creditor"（收取金額／移轉給債權人）
+  - "terminate_contract"（終止契約）
+  - "collect_policy_info"（收取保單資訊）
+  - "revoke_order"（撤銷原命令）
+  - 若無法對應，請新增自擬子類型（例如 "partial_revoke"）。
+- conditions_raw：擷取原文中關於「收取條件」「撤銷部分」「移轉於債權人」等主要句子。
+- related_doc_no：擷取被撤銷的原命令（例如「撤銷2024年3月15日收取令」）。
+- note（務必產生一句中文說明）：
+  組句邏輯如下：
+  1️⃣ 若同時有「收取」與「撤銷」：
+      「本案為收取及撤銷併行之公文，依據文載收取條件 {conditions_raw}，並撤銷原命令 {related_doc_no}。」
+  2️⃣ 若僅能擷取收取條件：
+      「本案為收取及撤銷併行之公文，依據文載收取條件 {conditions_raw} 辦理。」
+  3️⃣ 若僅能擷取撤銷命令：
+      「本案為收取及撤銷併行之公文，撤銷原命令 {related_doc_no}。」
+  4️⃣ 若資訊不足：
+      「本案為收取及撤銷併行之公文，依文內容辦理。」
+
+子類型中文對應（用於 note）：
+- collect_payment_to_creditor → 給付金額移轉於債權人
+- terminate_contract → 終止契約
+- collect_policy_info → 收取保單資訊
+- revoke_order → 撤銷原命令
+- partial_revoke → 部分撤銷
+
+範例：
+{
+  "policies": [
+    {"raw": "保單號 1234567", "normalized": null, "policy_no": "1234567"}
+  ],
+  "class_specific": {
+    "query_mode": "unspecified",
+    "subtypes": ["collect_payment_to_creditor", "revoke_order"],
+    "conditions_raw": "收取應給付保險金並撤銷先前之收取命令",
+    "related_doc_no": "2024年3月15日收取令",
+    "note": "本案為收取及撤銷併行之公文，依據文載收取條件 收取應給付保險金並撤銷先前之收取命令，並撤銷原命令 2024年3月15日收取令。"
+  }
+}
+
+嚴格要求：
+- 僅輸出**一個 JSON 物件**。
+- 不可刪除 core 已有欄位；僅新增或覆蓋上述欄位。
+- 不得輸出註解、說明文字、或多個 JSON。
