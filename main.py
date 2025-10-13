@@ -45,15 +45,13 @@ def post_validate(payload: Dict[str, Any], raw_text: str) -> Dict[str, Any]:
     return payload
 
 def render_reply(payload: Dict[str, Any]) -> str:
+    from datetime import datetime
     env = Environment(loader=FileSystemLoader(str(BASE / "templates")), trim_blocks=True, lstrip_blocks=True)
     tpl = env.get_template("reply_letter.txt.j2")
 
-    # 先取 doc_date；沒有就用今天
+    # 日期顯示：優先 doc_date，沒有才用今天
     today = today_fields()
     doc_date_iso = payload.get("doc_date") or today["today_iso"]
-
-    # 拆成年月日（模板仍使用 display_yyyy/mm/dd/iso）
-    from datetime import datetime
     try:
         dt = datetime.fromisoformat(doc_date_iso)
         display = {
@@ -63,7 +61,6 @@ def render_reply(payload: Dict[str, Any]) -> str:
             "display_iso": dt.strftime("%Y-%m-%d"),
         }
     except Exception:
-        # 防呆：格式不對時退回今天
         display = {
             "display_yyyy": today["today_yyyy"],
             "display_mm": today["today_mm"],
@@ -78,10 +75,13 @@ def render_reply(payload: Dict[str, Any]) -> str:
         officer_role=payload.get("officer_role"),
         officer_name=payload.get("officer_name"),
         contact_phone=payload.get("contact_phone"),
+
         targets=payload.get("targets", []),
+
+        # ★ 關鍵：把 add-on 寫入的內容帶進模板
         policies=payload.get("policies", []),
         class_specific=payload.get("class_specific", {}),
-        # ↓ 用 display_* 取代 today_* 給模板
+
         display_yyyy=display["display_yyyy"],
         display_mm=display["display_mm"],
         display_dd=display["display_dd"],
