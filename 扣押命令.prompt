@@ -1,0 +1,96 @@
+補充（class="扣押命令"）：
+你正在接續「core」已輸出的一個 JSON 物件，請在此基礎上**合併更新**下列欄位。
+⚠️ 僅輸出**一個完整 JSON 物件**（不得包含任何註解、說明文字或第二個 JSON）。
+
+────────────────────────────
+一、policies 欄位（請建立或覆蓋）
+────────────────────────────
+"policies": [
+  {"raw": "string", "normalized": null, "policy_no": null}
+]
+規則：
+- 擷取文中涉及的保單或契約（「保單號」「契約號」「單號」）。
+- 可多筆；"normalized" 暫留 null。
+
+────────────────────────────
+二、class_specific 欄位（請建立或合併）
+────────────────────────────
+{
+  "case_no": "string|null",                // 案號或法院識別編號
+  "executing_agency": "string|null",       // 執行機關（如○○地方法院）
+  "debtors": ["string"],                   // 債務人姓名（如有）
+  "subtypes": [                            // 子類別，可多選
+    "scope_of_effect",                     // 扣押效力範圍
+    "excluded_condition",                  // 排除不需扣押條件（如金額不足）
+    "excluded_insurance_type"              // 排除不需扣押保險類型
+  ],
+  "effect_scope": "string|null",           // 扣押效力範圍原文
+  "excluded_conditions": "string|null",    // 排除條件原文
+  "excluded_types": "string|null",         // 排除保險類型原文
+  "related_doc_no": "string|null",         // 依據文號或命令
+  "note": "string"                         // ★務必產生：一句中文摘要
+}
+
+偵測規則：
+────────────────────────────
+1️⃣ 扣押效力範圍（scope_of_effect）：
+- 擷取含「得請領之保險給付」「契約已終止第三人應返還」「保單價值準備金」「解約金」等句子。
+- 若命中 → subtypes 加入 "scope_of_effect"，並填入 effect_scope 原文片段。
+
+2️⃣ 排除不需扣押條件（excluded_condition）：
+- 若出現「不足○○元」「扣除手續費後不足」「不予扣押」「免予扣押」等字樣，
+  → subtypes 加入 "excluded_condition"，並填入 excluded_conditions。
+
+3️⃣ 排除不需扣押保險類型（excluded_insurance_type）：
+- 若出現「小額終老保險」「終止後無解約金」「不含○○險」「排除○○商品」等句子，
+  → subtypes 加入 "excluded_insurance_type"，並填入 excluded_types。
+
+4️⃣ 案號與機關：
+- 擷取「案號」「字第」「法院」「執行命令」「命令書」等詞。
+- executing_agency 取法院名（例如「臺北地方法院」）。
+
+5️⃣ 債務人：
+- 擷取「債務人」「被執行人」後的姓名；多筆以陣列呈現。
+
+6️⃣ note 組句邏輯：
+────────────────────────────
+依以下邏輯產出一句自然中文說明：
+- 若三種子類都命中：
+  「本案為扣押命令，說明扣押效力範圍、排除條件及排除保險類型，依文內容辦理。」
+- 若僅命中效力範圍：
+  「本案為扣押命令，明定扣押效力範圍：{effect_scope}。」
+- 若命中排除條件：
+  「本案為扣押命令，排除不需扣押之條件：{excluded_conditions}。」
+- 若命中保險類型排除：
+  「本案為扣押命令，排除不需扣押之保險類型：{excluded_types}。」
+- 若資訊多項皆有，合併句式：
+  「本案為扣押命令，明定扣押效力範圍：{effect_scope}；並排除條件：{excluded_conditions}；另排除保險類型：{excluded_types}。」
+- 若資訊不足：
+  「本案為扣押命令，依文內容辦理。」
+
+────────────────────────────
+範例：
+────────────────────────────
+{
+  "policies": [
+    {"raw": "保單號 1234567", "normalized": null, "policy_no": "1234567"}
+  ],
+  "class_specific": {
+    "case_no": "臺院金執字第123號",
+    "executing_agency": "臺北地方法院",
+    "debtors": ["王OO"],
+    "subtypes": ["scope_of_effect", "excluded_condition", "excluded_insurance_type"],
+    "effect_scope": "債務人一保險契約得請領之保險給付、契約已終止第三人應返還之保單價值準備金或解約金",
+    "excluded_conditions": "扣除手續費後不足新臺幣三萬元者不予扣押",
+    "excluded_types": "小額終老保險商品及其他終止後無解約金之壽險契約",
+    "related_doc_no": "臺院金執字第123號命令",
+    "note": "本案為扣押命令，明定扣押效力範圍：債務人一保險契約得請領之保險給付、契約已終止第三人應返還之保單價值準備金或解約金；並排除條件：扣除手續費後不足新臺幣三萬元者不予扣押；另排除保險類型：小額終老保險商品及其他終止後無解約金之壽險契約。"
+  }
+}
+
+────────────────────────────
+嚴格要求：
+────────────────────────────
+- 僅輸出一個 JSON 物件。
+- 不刪除 core 已有欄位；僅新增或覆蓋上方列舉欄位。
+- 不可輸出註解、說明或多個 JSON。
