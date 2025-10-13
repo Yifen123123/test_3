@@ -1,0 +1,163 @@
+補充（class="保單查詢＋註記"）：
+你正在接續「core」已輸出的一個 JSON 物件，請在此基礎上**合併更新**下列欄位。
+⚠️ 僅輸出**一個完整 JSON 物件**（不得包含任何說明文字、註解或第二個 JSON）。
+
+────────────────────────────
+一、targets（若 core 未完整，請補齊）
+────────────────────────────
+"targets": [
+  {"name": "string", "tw_id": "string|null", "id_valid": true|false}
+]
+規則：
+- 擷取所有被查詢或被註記的對象（被保險人/要保人/名冊條列）。
+- 身分證不確定可留 null；不要臆造。
+
+────────────────────────────
+二、policies（查詢與註記共同使用）
+────────────────────────────
+"policies": [
+  {"raw": "string", "normalized": null, "policy_no": null}
+]
+規則：
+- 擷取要查或要註記的保單（「保單號/契約號/單號」）；多筆逐一列出。
+- "normalized" 暫留 null，不要自行生成代碼。
+
+────────────────────────────
+三、transfer_info（若有函轉結構才建立）
+────────────────────────────
+"transfer_info": {
+  "has_transfer": true|false,
+  "forwarding_agency": "string|null",
+  "origin_agency": "string|null",
+  "related_doc_no": "string|null",
+  "summary_purpose": "string|null"
+}
+判斷邏輯：
+- 同時命中下列兩類語意 → has_transfer=true：
+  * 「轉請」「奉轉」「轉知」「檢送」「轉呈」「轉復」
+  * 「來函」「來文」「貴院」「○○法院」「○○檢察署」
+- 未命中 → has_transfer=false，其餘欄位可省略或置 null。
+- summary_purpose 請用一句中文歸納轉發要處理的事（例：「轉請查復王OO名下保單並加註限制註記」）。
+
+────────────────────────────
+四、class_specific（查詢＋註記的結構化解讀）
+────────────────────────────
+{
+  "query_mode": "by_policy_no" | "by_person" | "unspecified",
+  "policy_nos": ["string"],
+  "insured_names": ["string"],
+  "insured_ids": ["string"],
+
+  "subtypes": [                   // 查詢子類，可多選
+    "contract_change",            // 契約變更/批改/展期/復效
+    "policyholder_change",        // 要保人變更/受益人變更
+    "claim_history",              // 給付/理賠紀錄
+    "loan_history"                // 借款/還款/墊繳紀錄
+  ],
+
+  "annotation_types": [           // 註記類型，可多選
+    "restriction",                // 禁止/限制（例：不得借款/不得解約/凍結）
+    "warning",                    // 警示/注意/標示
+    "general",                    // 一般註記/保全註記
+    "remove",                     // 解除/刪除/撤銷註記
+    "unspecified"                 // 不明確但可判定有註記
+  ],
+  "annotation_reason": "string|null",   // 註記事由（原文片段）
+  "annotation_range": { "start": "yyyy-mm-dd|null", "end": "yyyy-mm-dd|null" },  // 註記期間（民國轉西元）
+
+  "time_range":   { "start": "yyyy-mm-dd|null", "end": "yyyy-mm-dd|null" },      // 查詢期間（民國轉西元）
+  "related_doc_no": "string|null",      // 依據文號（若文中有「依○○字第○號」）
+  "note": "string"                      // ★務必產生：一句中文摘要（見下方規則）
+}
+
+偵測規則：
+- query_mode：
+  * 有「保單號/契約號/單號」→ by_policy_no；有人名且無號 → by_person；否則 unspecified。
+- subtypes（查詢）關鍵詞：
+  * 「契約變更/批改/展期/復效」→ contract_change
+  * 「要保人變更/受益人變更/保戶變更」→ policyholder_change
+  * 「給付/理賠/保險金給付/醫療給付/失能給付」→ claim_history
+  * 「保單借款/借款/還款/還本/墊繳」→ loan_history
+- annotation_types（註記）關鍵詞：
+  * 「禁止/不得/凍結/限制」→ restriction
+  * 「警示/注意/標示」→ warning
+  * 「保全註記/一般註記」→ general
+  * 「解除註記/刪除註記/撤銷註記」→ remove
+  * 無明確類型但可判定有註記 → unspecified
+- annotation_reason：
+  * 擷取含「因/依/依據/緣由/理由如下」的句子（例：「因債權人聲請，依法院命令」）。
+- 日期欄位（annotation_range/time_range）：
+  * 「自…至…」「截至…」「○日內」等 → 轉為 yyyy-mm-dd；民國年需轉西元；無法判斷填 null。
+- related_doc_no：
+  * 「依○○字第○號函」「依○○命令」「依○○來文」等。
+
+────────────────────────────
+五、note 組句規則（務必產生一行中文）
+────────────────────────────
+請整合「查詢＋註記＋（若有）函轉」資訊，生成一行自然中文摘要：
+優先順序：先說明是否函轉 → 再說明查詢模式與註記重點 → 補充依據或期間（若可）。
+- has_transfer=true 且同時有 forwarding_agency 與 origin_agency：
+  「本案為保單查詢與註記（函轉案件），由 {forwarding_agency} 轉請 {origin_agency} 辦理；查詢/註記要點：{summary_purpose 或合成的重點}。」
+- has_transfer=true 但只掌握其一機關：
+  「本案為保單查詢與註記（函轉案件），由 {已知機關} 轉請辦理；查詢/註記要點：{…}。」
+- 無函轉：
+  - 若 query_mode=by_policy_no：  
+    「本案為保單查詢與註記（以保單號查詢），並辦理相關註記事項。」
+  - 若 query_mode=by_person：  
+    「本案為保單查詢與註記（以人別查詢），並辦理相關註記事項。」
+  - 否則：  
+    「本案為保單查詢與註記，依文內容辦理。」
+- 若能明確指出註記類型或事由，附於句尾括號：  
+  例：「（註記類型：限制註記；事由：因債權人聲請）」。
+
+────────────────────────────
+六、範例
+────────────────────────────
+範例一（函轉，以人別查詢＋限制註記）：
+{
+  "targets": [
+    {"name": "王OO", "tw_id": "A123456789", "id_valid": true}
+  ],
+  "policies": [
+    {"raw": "壽險", "normalized": null, "policy_no": null}
+  ],
+  "transfer_info": {
+    "has_transfer": true,
+    "forwarding_agency": "金融監督管理委員會",
+    "origin_agency": "臺北地方法院",
+    "related_doc_no": "北院金字第112號",
+    "summary_purpose": "轉請查復王OO名下壽險保單並加註限制註記"
+  },
+  "class_specific": {
+    "query_mode": "by_person",
+    "insured_names": ["王OO"],
+    "subtypes": ["claim_history"],
+    "annotation_types": ["restriction"],
+    "annotation_reason": "因債權人聲請，依法院命令加註限制",
+    "annotation_range": {"start": "2024-06-01", "end": null},
+    "related_doc_no": "北院金字第112號",
+    "note": "本案為保單查詢與註記（函轉案件），由 金融監督管理委員會 轉請 臺北地方法院 辦理；查詢/註記要點：轉請查復王OO名下壽險保單並加註限制註記。（註記類型：限制註記；事由：因債權人聲請）"
+  }
+}
+
+範例二（一般，保單號查詢＋解除註記）：
+{
+  "policies": [
+    {"raw": "保單號 1234567", "normalized": null, "policy_no": "1234567"}
+  ],
+  "class_specific": {
+    "query_mode": "by_policy_no",
+    "policy_nos": ["1234567"],
+    "annotation_types": ["remove"],
+    "annotation_reason": "依來文撤銷原限制註記",
+    "annotation_range": {"start": null, "end": null},
+    "note": "本案為保單查詢與註記（以保單號查詢），並辦理相關註記事項。（註記類型：解除註記）"
+  }
+}
+
+────────────────────────────
+嚴格要求：
+────────────────────────────
+- 僅輸出**一個 JSON 物件**。
+- 不刪除 core 已有欄位；僅新增或覆蓋上方列舉欄位。
+- 不可輸出註解、說明或多個 JSON。
