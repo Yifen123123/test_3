@@ -7,7 +7,8 @@ from .router import load_prompt
 from .llm_client import chat_ollama_json
 from .utils import (
     validate_tw_id, today_fields,
-    extract_officer, extract_phone, extract_doc_no
+    extract_officer, extract_phone, extract_doc_no,  # 你原本就有
+    extract_doc_date                                 # ← 新增這個
 )
 
 BASE = Path(__file__).resolve().parents[1]
@@ -36,12 +37,40 @@ def post_validate(payload: Dict[str, Any], raw_text: str) -> Dict[str, Any]:
         if doc_no:
             payload["doc_no"] = doc_no
 
+    if not payload.get("doc_date"):
+        dd = extract_doc_date(raw_text)
+        if dd:
+            payload["doc_date"] = dd
+
     return payload
 
 def render_reply(payload: Dict[str, Any]) -> str:
     env = Environment(loader=FileSystemLoader(str(BASE / "templates")), trim_blocks=True, lstrip_blocks=True)
     tpl = env.get_template("reply_letter.txt.j2")
+
+    # 先取 doc_date；沒有就用今天
     today = today_fields()
+    doc_date_iso = payload.get("doc_date") or today["today_iso"]
+
+    # 拆成年月日（模板仍使用 display_yyyy/mm/dd/iso）
+    from datetime import datetime
+    try:
+        dt = datetime.fromisoformat(doc_date_iso)
+        display = {
+            "display_yyyy": f"{dt.year}",
+            "display_mm": f"{dt.month:02d}",
+            "display_dd": f"{dt.day:02d}",
+            "display_iso": dt.strftime("%Y-%m-%d"),
+        }
+    except Exception:
+        # 防呆：格式不對時退回今天
+        display = {
+            "display_yyyy": today["today_yyyy"],
+            "display_mm": today["today_mm"],
+            "display_dd": today["today_dd"],
+            "display_iso": today["today_iso"],
+        }
+
     text = tpl.render(
         agency=payload.get("agency"),
         reference_date=payload.get("reference_date"),
@@ -52,9 +81,14 @@ def render_reply(payload: Dict[str, Any]) -> str:
         targets=payload.get("targets", []),
         policies=payload.get("policies", []),
         class_specific=payload.get("class_specific", {}),
-        **today
+        # ↓ 用 display_* 取代 today_* 給模板
+        display_yyyy=display["display_yyyy"],
+        display_mm=display["display_mm"],
+        display_dd=display["display_dd"],
+        display_iso=display["display_iso"],
     )
     return text
+
 
 def infer_class_from_path(p: Path) -> str:
     # 假設你的資料結構為 data/<類別>/<檔名>.txt

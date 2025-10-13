@@ -59,6 +59,53 @@ def extract_phone(text: str) -> str | None:
 # ===== 承辦資訊抽取（職稱或姓名）=====
 ROLE_WORDS = ['書記官','承辦人','聯絡人','承辦','股員','股長','專員']
 NAME_HINT = r'[^\s，、()（）]{2,4}'  # 2-4字中文名的寬鬆提示
+DATE_ROC_RE = re.compile(r'民國\s*(\d{2,3})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日')
+DATE_ISO_RE = re.compile(r'(20\d{2})[./\-年]?\s*(\d{1,2})[./\-月]?\s*(\d{1,2})\s*日?')
+
+def normalize_date_roc_to_iso(y:int, m:int, d:int) -> str | None:
+    try:
+        y = 1911 + y
+        return datetime(y, m, d).strftime("%Y-%m-%d")
+    except Exception:
+        return None
+
+def extract_doc_date(text: str) -> str | None:
+    """
+    依關鍵詞就近抓一組日期；支援民國/西元多種寫法。
+    優先關鍵詞：發文日期/發文日/來文日期/來文日/發文時間/來文時間
+    """
+    KEYWORDS = ['發文日期','發文日','來文日期','來文日','發文時間','來文時間']
+    # 先掃有關鍵詞的區域
+    for m in re.finditer('|'.join(map(re.escape, KEYWORDS)), text):
+        start, end = m.start(), m.end()
+        win = text[max(0, start-20):min(len(text), end+30)]
+        # 民國優先
+        m1 = DATE_ROC_RE.search(win)
+        if m1:
+            y, mm, dd = map(int, m1.groups())
+            iso = normalize_date_roc_to_iso(y, mm, dd)
+            if iso: return iso
+        # 西元
+        m2 = DATE_ISO_RE.search(win)
+        if m2:
+            y, mm, dd = map(int, m2.groups())
+            try:
+                return datetime(y, mm, dd).strftime("%Y-%m-%d")
+            except Exception:
+                pass
+    # 無關鍵詞時，降級為全文第一組日期
+    m1 = DATE_ROC_RE.search(text)
+    if m1:
+        y, mm, dd = map(int, m1.groups())
+        return normalize_date_roc_to_iso(y, mm, dd)
+    m2 = DATE_ISO_RE.search(text)
+    if m2:
+        y, mm, dd = map(int, m2.groups())
+        try:
+            return datetime(y, mm, dd).strftime("%Y-%m-%d")
+        except Exception:
+            return None
+    return None
 
 def extract_officer(text: str) -> tuple[str|None, str|None]:
     # 標記型態：「承辦人：王小明」、「書記官：林OO」、「聯絡人：張小姐」
