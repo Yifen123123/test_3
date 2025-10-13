@@ -1,0 +1,50 @@
+補充（class="通知函"）：
+你正在接續「core」已輸出的一個 JSON 物件，請在此基礎上**合併更新**下列欄位。
+⚠️ 僅輸出**一個完整 JSON 物件**（不得包含說明文字、註解或第二個 JSON）。
+
+一、class_specific 欄位（請建立或合併）
+{
+  "urgency_level": "normal" | "urgent" | "expedited",   // 通知急迫程度
+  "response_deadline": "yyyy-mm-dd|null",               // 規定期限或限期日期
+  "subtypes": ["string"],                               // 子類別，例如「暫緩執行」
+  "notice_raw": "string|null",                          // 通知原文主要語句（擷取原句）
+  "note": "string"                                      // 一句中文摘要說明
+}
+
+規則：
+- urgency_level：
+  - 若文中含「速」「速為」「請即」「限期」「急辦」等字樣 → "urgent"
+  - 若含「火速」「即刻」「立即」→ "expedited"
+  - 否則為 "normal"。
+- response_deadline：
+  - 擷取「○日內」「限○日內」「於○○日前回覆」等日期或天數。
+  - 若為民國年或文字日期，請轉換為 yyyy-mm-dd 格式；若僅為「○日內」則填 null。
+- subtypes：
+  - 若文中包含「暫緩執行」「暫緩辦理」「延後處理」「先暫不執行」等語句 → ["suspend_execution"]。
+  - 若非屬暫緩，但有其他明確通知性主題，可自擬一個簡短英文子類型（例如 "request_response"、"status_update"）。
+- notice_raw：
+  - 擷取主文中「請」「速」「限期」「暫緩」等句子，代表通知的主要指示或要求。
+- note（務必產生一句中文說明）：
+  組句邏輯如下：
+  1️⃣ 若屬暫緩執行類：
+      「本案為通知函（子類型：暫緩執行），依文意暫緩相關作業之執行。」
+  2️⃣ 若含限期或急迫用語：
+      「本案為通知函，內容涉及限期或急辦事項，請依規定期限辦理。」
+  3️⃣ 若無特殊條件：
+      「本案為一般性通知函，請依文內容辦理。」
+
+範例：
+{
+  "class_specific": {
+    "urgency_level": "urgent",
+    "response_deadline": null,
+    "subtypes": ["suspend_execution"],
+    "notice_raw": "請暫緩執行收取作業，俟法院進一步通知。",
+    "note": "本案為通知函（子類型：暫緩執行），依文意暫緩相關作業之執行。"
+  }
+}
+
+嚴格要求：
+- 僅輸出**一個 JSON 物件**。
+- 不可刪除 core 已有欄位；僅新增或覆蓋上方列舉部分。
+- 不得輸出說明文字、註解、或多個 JSON。
