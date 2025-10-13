@@ -1,32 +1,80 @@
-受文者：{{ agency or "【缺資料】" }}
+發文機關：{{ agency or "【缺資料】" }}
+受文者：{{ payload.get("receiver") if payload else "【缺資料】" }}
 發文日期：{{ display_yyyy }}年{{ display_mm }}月{{ display_dd }}日（西元 {{ display_iso }}）
-主旨：就 貴機關 {{ reference_date or "【缺資料】" }} 基準日 來函查詢之保險資料，復如說明，請查照。
 
 說明：
-一、來函資訊：
-　　發文字號（來文）：{{ doc_no or "【未提供】" }}
-{% if officer_role or officer_name or contact_phone %}
-　　承辦資訊：{{ officer_role or "" }}{% if officer_role and officer_name %}／{% endif %}{{ officer_name or "" }}　電話：{{ contact_phone or "【未提供】" }}
+一、查詢對象如下：
+{% if targets and targets|length > 0 %}
+{% for p in targets %}
+  ({{ loop.index }}) 姓名：{{ p.name or "【缺資料】" }}{% if p.tw_id %}（身分證號：{{ p.tw_id }}）{% endif %}
+{% endfor %}
+{% else %}
+  【未擷取到查詢對象】
 {% endif %}
 
-二、來函查詢對象：
-{% if targets and targets|length>0 -%}
-{% for p in targets %}
-　　({{ loop.index }}) 姓名：{{ p.name or "【缺資料】" }}{% if p.alias and p.alias|length>0 %}（原名/別名：{{ p.alias|join('、') }}）{% endif %}，身分證號：{{ p.tw_id or "【缺資料】" }}{% if not p.get("id_valid", True) %}【身分證檢核未通過，請覆核】{% endif %}
-{% endfor %}
-{%- else %}
-　　【未擷取到查詢對象】
-{%- endif %}
-
-三、查詢基準日：{{ reference_date or "【缺資料】" }}
-
-四、查詢保單項目：
-{% if policies and policies|length>0 -%}
+二、查詢保單項目：
+{% if policies and policies|length > 0 %}
 {% for pol in policies %}
-　　- {{ pol.raw }}{% if pol.normalized %}（代碼：{{ pol.normalized }}）{% endif %}{% if pol.policy_no %}，保單號：{{ pol.policy_no }}{% endif %}
+  - {{ pol.raw or "【缺資料】" }}
 {% endfor %}
-{%- else %}
-　　【未擷取到保單項目】
-{%- endif %}
+{% else %}
+  【未擷取到保單項目】
+{% endif %}
 
-（以上內容僅就已提供資料範圍敘明，若需補充文件或授權，請依程序補齊。）
+三、其他事項：
+  依規定辦理，請查照。
+
+四、聯絡方式：
+  聯絡電話：{{ class_specific.get("contact_phone") or "【缺資料】" }}
+
+{# ================== 第五點 ================== #}
+{% set note = class_specific.get('note') if class_specific else None %}
+{% if note %}
+五、{{ note }}
+    {% if transfer_info and (transfer_info.get('has_transfer') or transfer_info.get('forwarding_agency') or transfer_info.get('origin_agency')) %}
+    （函轉資訊）
+      {% if transfer_info.get('forwarding_agency') %}- 轉發機關：{{ transfer_info.get('forwarding_agency') }}{% endif %}
+      {% if transfer_info.get('origin_agency') %}- 原始發文機關：{{ transfer_info.get('origin_agency') }}{% endif %}
+      {% if transfer_info.get('related_doc_no') %}- 原文文號：{{ transfer_info.get('related_doc_no') }}{% endif %}
+      {% if transfer_info.get('summary_purpose') %}- 轉發摘要：{{ transfer_info.get('summary_purpose') }}{% endif %}
+    {% endif %}
+
+    {% if doc_class in ['保單查詢', '保單查詢＋註記'] %}
+      {% if class_specific.get('query_mode') %}
+    - 查詢模式：{{ class_specific.get('query_mode') }}
+      {% endif %}
+      {% if class_specific.get('subtypes') %}
+    - 查詢子類型：{{ class_specific.get('subtypes')|join('、') }}
+      {% endif %}
+      {% if class_specific.get('annotation_types') %}
+    - 註記類型：{{ class_specific.get('annotation_types')|join('、') }}
+      {% endif %}
+      {% if class_specific.get('annotation_reason') %}
+    - 註記事由：{{ class_specific.get('annotation_reason') }}
+      {% endif %}
+    {% elif doc_class == '收取令' %}
+      {% if class_specific.get('conditions_raw') %}
+    - 收取條件：{{ class_specific.get('conditions_raw') }}
+      {% endif %}
+    {% elif doc_class == '收取＋撤銷' %}
+      {% if class_specific.get('conditions_raw') %}
+    - 收取條件：{{ class_specific.get('conditions_raw') }}
+      {% endif %}
+      {% if class_specific.get('related_doc_no') %}
+    - 撤銷原命令：{{ class_specific.get('related_doc_no') }}
+      {% endif %}
+    {% elif doc_class == '撤銷令' %}
+      {% if class_specific.get('case_no') %}- 案號：{{ class_specific.get('case_no') }}{% endif %}
+      {% if class_specific.get('related_doc_no') %}- 被撤銷文號：{{ class_specific.get('related_doc_no') }}{% endif %}
+      {% if class_specific.get('cancel_reason') %}- 撤銷理由：{{ class_specific.get('cancel_reason') }}{% endif %}
+    {% elif doc_class == '通知函' %}
+      {% if class_specific.get('subtypes') %}- 子類別：{{ class_specific.get('subtypes')|join('、') }}{% endif %}
+      {% if class_specific.get('notice_raw') %}- 通知重點：{{ class_specific.get('notice_raw') }}{% endif %}
+    {% elif doc_class == '扣押命令' %}
+      {% if class_specific.get('case_no') %}- 案號：{{ class_specific.get('case_no') }}{% endif %}
+      {% if class_specific.get('executing_agency') %}- 執行機關：{{ class_specific.get('executing_agency') }}{% endif %}
+      {% if class_specific.get('effect_scope') %}- 扣押效力範圍：{{ class_specific.get('effect_scope') }}{% endif %}
+      {% if class_specific.get('excluded_conditions') %}- 排除條件：{{ class_specific.get('excluded_conditions') }}{% endif %}
+      {% if class_specific.get('excluded_types') %}- 排除保險類型：{{ class_specific.get('excluded_types') }}{% endif %}
+    {% endif %}
+{% endif %}
