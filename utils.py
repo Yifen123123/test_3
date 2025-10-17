@@ -162,45 +162,37 @@ def _pad2(n: int) -> str:
 def _roc_to_ad(y: int) -> int:
     # ROC 1年=1912年，通常文書以1911偏移處理
     return y + 1911
-
 def _parse_date_like(token: str) -> Optional[str]:
     """
-    支援：
-      - 100年09月09日 / 112/7/1 / 112.07.01 / 1120701（皆視為民國）
-      - 2024-7-1 / 2024/07/01 / 2024.07.01（西元）
-    回傳 yyyy-mm-dd 或 None
+    同時支援民國與西元日期，確保 111 轉成 2022，不誤判。
     """
     t = _to_halfwidth(token).strip()
 
-    # 1) ROC: YYY年MM月DD日
-    m = re.search(r"(?P<y>\d{2,3})\s*年\s*(?P<m>\d{1,2})\s*月\s*(?P<d>\d{1,2})\s*日?", t)
+    # ROC: 含「年」關鍵字（例如 112年7月1日）
+    m = re.search(r"(?P<y>\d{2,3})\s*年\s*(?P<m>\d{1,2})\s*月\s*(?P<d>\d{1,2})", t)
     if m:
-        y, mth, d = int(m.group("y")), int(m.group("m")), int(m.group("d"))
-        return f"{_roc_to_ad(y)}-{_pad2(mth)}-{_pad2(d)}"
+        y = int(m.group("y"))
+        if 1 <= y < 200:   # ROC 1–199（民國）
+            y = y + 1911
+        return f"{y}-{_pad2(int(m.group('m')))}-{_pad2(int(m.group('d')))}"
 
-    # 2) ROC with separators: 112/7/1 或 112.07.01 或 112-7-1
-    m = re.search(r"(?P<y>\d{2,3})[./-](?P<m>\d{1,2})[./-](?P<d>\d{1,2})", t)
+    # ROC separators 112/7/1、112.07.01、1120701
+    m = re.search(r"(?P<y>\d{2,3})[./-]?(?P<m>\d{1,2})[./-]?(?P<d>\d{1,2})", t)
     if m:
-        y, mth, d = int(m.group("y")), int(m.group("m")), int(m.group("d"))
-        return f"{_roc_to_ad(y)}-{_pad2(mth)}-{_pad2(d)}"
+        y = int(m.group("y"))
+        if 1 <= y < 200:   # ROC
+            y = y + 1911
+        elif 1900 <= y <= 2099:  # 西元
+            y = y
+        else:
+            return None
+        return f"{y}-{_pad2(int(m.group('m')))}-{_pad2(int(m.group('d')))}"
 
-    # 3) ROC compact: 1120701 或 0990909
-    m = re.search(r"\b(?P<y>\d{2,3})(?P<m>\d{2})(?P<d>\d{2})\b", t)
-    if m and len(m.group("y")) in (2, 3):
-        y, mth, d = int(m.group("y")), int(m.group("m")), int(m.group("d"))
-        return f"{_roc_to_ad(y)}-{_pad2(mth)}-{_pad2(d)}"
-
-    # 4) AD: 2024-07-01 / 2024/7/1 / 2024.7.1
-    m = re.search(r"(?P<y>20\d{2})[./-](?P<m>\d{1,2})[./-](?P<d>\d{1,2})", t)
+    # AD: 2024-07-01 / 2024.7.1 / 2024年7月1日
+    m = re.search(r"(?P<y>20\d{2})\D(?P<m>\d{1,2})\D(?P<d>\d{1,2})", t)
     if m:
-        y, mth, d = int(m.group("y")), int(m.group("m")), int(m.group("d"))
-        return f"{y}-{_pad2(mth)}-{_pad2(d)}"
-
-    # 5) AD: 2024年7月1日
-    m = re.search(r"(?P<y>20\d{2})\s*年\s*(?P<m>\d{1,2})\s*月\s*(?P<d>\d{1,2})\s*日?", t)
-    if m:
-        y, mth, d = int(m.group("y")), int(m.group("m")), int(m.group("d"))
-        return f"{y}-{_pad2(mth)}-{_pad2(d)}"
+        y = int(m.group("y"))
+        return f"{y}-{_pad2(int(m.group('m')))}-{_pad2(int(m.group('d')))}"
 
     return None
 
