@@ -147,3 +147,96 @@ def today_fields():
         "today_iso": t.isoformat(),
         "today_yyyymmdd": t.strftime("%Y%m%d"),
     }
+
+import re
+from typing import Optional
+
+_FULLWIDTH_DIGITS = str.maketrans("０１２３４５６７８９／．－", "0123456789/.-")
+
+def _to_halfwidth(s: str) -> str:
+    return (s or "").translate(_FULLWIDTH_DIGITS)
+
+def _pad2(n: int) -> str:
+    return f"{n:02d}"
+
+def _roc_to_ad(y: int) -> int:
+    # ROC 1年=1912年，通常文書以1911偏移處理
+    return y + 1911
+
+def _parse_date_like(token: str) -> Optional[str]:
+    """
+    支援：
+      - 100年09月09日 / 112/7/1 / 112.07.01 / 1120701（皆視為民國）
+      - 2024-7-1 / 2024/07/01 / 2024.07.01（西元）
+    回傳 yyyy-mm-dd 或 None
+    """
+    t = _to_halfwidth(token).strip()
+
+    # 1) ROC: YYY年MM月DD日
+    m = re.search(r"(?P<y>\d{2,3})\s*年\s*(?P<m>\d{1,2})\s*月\s*(?P<d>\d{1,2})\s*日?", t)
+    if m:
+        y, mth, d = int(m.group("y")), int(m.group("m")), int(m.group("d"))
+        return f"{_roc_to_ad(y)}-{_pad2(mth)}-{_pad2(d)}"
+
+    # 2) ROC with separators: 112/7/1 或 112.07.01 或 112-7-1
+    m = re.search(r"(?P<y>\d{2,3})[./-](?P<m>\d{1,2})[./-](?P<d>\d{1,2})", t)
+    if m:
+        y, mth, d = int(m.group("y")), int(m.group("m")), int(m.group("d"))
+        return f"{_roc_to_ad(y)}-{_pad2(mth)}-{_pad2(d)}"
+
+    # 3) ROC compact: 1120701 或 0990909
+    m = re.search(r"\b(?P<y>\d{2,3})(?P<m>\d{2})(?P<d>\d{2})\b", t)
+    if m and len(m.group("y")) in (2, 3):
+        y, mth, d = int(m.group("y")), int(m.group("m")), int(m.group("d"))
+        return f"{_roc_to_ad(y)}-{_pad2(mth)}-{_pad2(d)}"
+
+    # 4) AD: 2024-07-01 / 2024/7/1 / 2024.7.1
+    m = re.search(r"(?P<y>20\d{2})[./-](?P<m>\d{1,2})[./-](?P<d>\d{1,2})", t)
+    if m:
+        y, mth, d = int(m.group("y")), int(m.group("m")), int(m.group("d"))
+        return f"{y}-{_pad2(mth)}-{_pad2(d)}"
+
+    # 5) AD: 2024年7月1日
+    m = re.search(r"(?P<y>20\d{2})\s*年\s*(?P<m>\d{1,2})\s*月\s*(?P<d>\d{1,2})\s*日?", t)
+    if m:
+        y, mth, d = int(m.group("y")), int(m.group("m")), int(m.group("d"))
+        return f"{y}-{_pad2(mth)}-{_pad2(d)}"
+
+    return None
+
+def extract_reference_date(raw_text: str) -> Optional[str]:
+    """
+    針對『查調日/申報基準日/基準日：』等標籤式寫法加強擷取。
+    會優先找帶冒號（：或:）的標籤後的日期字串。
+    """
+    if not raw_text:
+        return None
+    text = _to_halfwidth(raw_text.replace("\u3000", " "))
+
+    # 1) 直接標籤 + 冒號
+    #   例：查調日（申報基準日）：100年09月09日
+    #       基準日: 112.7.1
+    for m in re.finditer(r"(查調日|申報基準日|基準日)\s*[:：]\s*([^\n\r，。；；]+)", text):
+        cand = m.group(2).strip()
+        parsed = _parse_date_like(cand)
+        if parsed:
+            return parsed
+
+    # 2) 標籤後面若不是同一段，往後10~30字內找日期
+    for m in re.finditer(r"(查調日|申報基準日|基準日)[）\)]?\s*[:：]?", text):
+        span_end = m.end()
+        window = text[span_end: span_end + 40]
+        parsed = _parse_date_like(window)
+        if parsed:
+            return parsed
+
+    # 3) 鄰近人別式備援（姓名/身分證後面 40 字內）
+    for m in re.finditer(r"[A-Z][12]\d{8}|[一-龥]{2,4}[○Ｏ\*]{0,2}", text):
+        span_end = m.end()
+        window = text[span_end: span_end + 40]
+        if re.search(r"(基準日|查調日|申報基準日)", window):
+            parsed = _parse_date_like(window)
+            if parsed:
+                return parsed
+
+    return None
