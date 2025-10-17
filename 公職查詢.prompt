@@ -1,52 +1,65 @@
 補充（class="公職查詢"）：
 你正在接續「core」已輸出的一個 JSON 物件，請在此基礎上**合併更新**下列欄位。
-⚠️ 僅輸出**一個完整 JSON 物件**（不可有多餘說明、註解或第二個 JSON）。
+⚠️ 僅輸出一個完整 JSON 物件（不可有註解或說明文字）。
 
-一、targets 欄位（請建立或覆蓋）
-"targets": [
-  {"name": "string", "tw_id": "string|null", "id_valid": true|false}
-]
-規則：
-- 從公文原文擷取「名單」中被查詢的公職人員。
-- 每個人應建立一筆物件；包含姓名與身分證號（若有），身分證可留 null。
-- 名單格式可能以「附件所列○○人」、「下列人員」或條列清單出現，請完整擷取。
-
-二、reference_date 欄位（請建立或覆蓋）
-"reference_date": "yyyy-mm-dd|null"
-規則：
-- 從原文中尋找「基準日」、「截至○○日」等字樣。
-- 若以民國年表示，請轉換為西元 yyyy-mm-dd。
-- 若無法判斷，請填 null。
-
-三、class_specific 欄位（請建立或合併）
+────────────────────────────
+一、class_specific 欄位
+────────────────────────────
 {
-  "query_mode": "by_person" | "unspecified",
-  "reference_date_found": true|false,
+  "query_type": "public_official_status",
+  "reference_date": "yyyy-mm-dd|null",
+  "targets_verified": true|false,
   "note": "string"
 }
-規則：
-- query_mode 一律為 by_person（本類查詢皆以人名為主）。
-- reference_date_found 若文中有明確「基準日」則 true，否則 false。
-- note 為一句中文描述性說明，**務必產生**。
-  組句邏輯如下：
-  - 若有基準日與名單 → 「本案為公職人員查詢函，依基準日 {reference_date} 查核下列人員名單。」
-  - 若僅有名單無基準日 → 「本案為公職人員查詢函，查核下列人員名單。」
-  - 若資訊不足 → 「本案為公職人員查詢函。」
+
+────────────────────────────
+二、欄位說明與偵測規則
+────────────────────────────
+
+📍 reference_date（基準日）
+- 公職查詢的基準日常出現於查詢對象（姓名或身分證）之後。
+- **特別注意以下幾種格式**：
+  1️⃣ 「王○○（A123456789）基準日：112年7月1日」  
+  2️⃣ 「王○○（A123456789）基準日：2024年7月1日」  
+  3️⃣ 「王○○基準日：112.07.01」  
+  4️⃣ 「王○○（A123456789）於112年7月1日基準日」  
+- 若有多個日期，選擇「緊鄰查詢對象（姓名或身分證）」的日期。
+- 允許格式：
+  * 民國年（112年7月1日、112/7/1、112.7.1）→ 轉換為 2023-07-01
+  * 西元年（2024年7月1日、2024/7/1）→ 直接使用 yyyy-mm-dd 格式
+- 若無法辨識 → "reference_date": null。
+
+📍 targets_verified
+- 若明確出現姓名或身分證 → true。
+- 若無具體對象（例如只說「查詢相關人員」） → false。
+
+📍 note（摘要說明）
+- 請根據擷取結果組成一句中文摘要：
+  - 若有查詢對象與基準日：
+    「本案為公職查詢函，查詢{name或targets[0].name}（{targets[0].tw_id}）基準日為{reference_date}。」
+  - 若僅有日期無人名：
+    「本案為公職查詢函，基準日為{reference_date}。」
+  - 若無日期：
+    「本案為公職查詢函，基準日未明。」
+
+────────────────────────────
+三、輸出規範
+────────────────────────────
+- 僅輸出 JSON 物件，不可有多餘說明或註解。
+- 仍保留 core 提供的欄位（agency、targets、doc_no...）。
+- 日期一律 yyyy-mm-dd；民國年需轉換為西元。
+- 若未擷取到基準日 → "reference_date": null。
+────────────────────────────
 
 範例：
 {
-  "targets": [
-    {"name": "王OO", "tw_id": "A123456789", "id_valid": true},
-    {"name": "林OO", "tw_id": null, "id_valid": false}
-  ],
-  "reference_date": "2025-05-15",
   "class_specific": {
-    "query_mode": "by_person",
-    "reference_date_found": true,
-    "note": "本案為公職人員查詢函，依基準日 2025-05-15 查核下列人員名單。"
+    "query_type": "public_official_status",
+    "reference_date": "2023-07-01",
+    "targets_verified": true,
+    "note": "本案為公職查詢函，查詢王○○（A123456789）基準日為2023-07-01。"
   }
 }
-
 嚴格要求：
 - 僅輸出**一個 JSON 物件**。
 - 不要移除 core 既有欄位；僅在上方列舉的部分新增或覆蓋。
