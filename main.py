@@ -43,6 +43,17 @@ def post_validate(payload: Dict[str, Any], raw_text: str) -> Dict[str, Any]:
         dd = extract_doc_date(raw_text)
         if dd: payload["doc_date"] = dd
 
+    import re
+    obs = set(re.findall(r'[A-Za-z0-9][A-Za-z0-9\-#]{6,}', raw_text or ''))  # 原文中所有像號碼的片段
+    for pol in payload.get("policies") or []:
+        pno = pol.get("policy_no")
+        raw = pol.get("raw") or ""
+        if not pno:
+            continue
+        # 必須含數字、且同時出現在「原文 obs」與「該筆 raw」；否則清空
+        if (not any(c.isdigit() for c in pno)) or (pno not in obs) or (pno not in raw):
+            pol["policy_no"] = None
+    
     return payload
 
 def render_reply(payload: Dict[str, Any]) -> str:
